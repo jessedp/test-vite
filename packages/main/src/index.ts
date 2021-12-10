@@ -1,7 +1,9 @@
-import {app, BrowserWindow, shell} from 'electron';
-import {join} from 'path';
-import {URL} from 'url';
+import { app, BrowserWindow, shell } from 'electron';
+import { join } from 'path';
+import { URL } from 'url';
+import * as Store from 'electron-store';
 
+Store.initRenderer();
 
 const isSingleInstance = app.requestSingleInstanceLock();
 const isDevelopment = import.meta.env.MODE === 'development';
@@ -15,14 +17,17 @@ app.disableHardwareAcceleration();
 
 // Install "Vue.js devtools"
 if (isDevelopment) {
-  app.whenReady()
+  app
+    .whenReady()
     .then(() => import('electron-devtools-installer'))
-    .then(({default: installExtension, VUEJS3_DEVTOOLS}) => installExtension(VUEJS3_DEVTOOLS, {
-      loadExtensionOptions: {
-        allowFileAccess: true,
-      },
-    }))
-    .catch(e => console.error('Failed install extension:', e));
+    .then(({ default: installExtension, VUEJS3_DEVTOOLS }) =>
+      installExtension(VUEJS3_DEVTOOLS, {
+        loadExtensionOptions: {
+          allowFileAccess: true,
+        },
+      }),
+    )
+    .catch((e) => console.error('Failed install extension:', e));
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -56,16 +61,18 @@ const createWindow = async () => {
    * Vite dev server for development.
    * `file://../renderer/index.html` for production and test
    */
-  const pageUrl = isDevelopment && import.meta.env.VITE_DEV_SERVER_URL !== undefined
-    ? import.meta.env.VITE_DEV_SERVER_URL
-    : new URL('../renderer/dist/index.html', 'file://' + __dirname).toString();
-
+  const pageUrl =
+    isDevelopment && import.meta.env.VITE_DEV_SERVER_URL !== undefined
+      ? import.meta.env.VITE_DEV_SERVER_URL
+      : new URL(
+          '../renderer/dist/index.html',
+          'file://' + __dirname,
+        ).toString();
 
   await mainWindow.loadURL(pageUrl);
 };
 
 app.on('web-contents-created', (_event, contents) => {
-
   /**
    * Block navigation to origins not on the allowlist.
    *
@@ -75,34 +82,34 @@ app.on('web-contents-created', (_event, contents) => {
    * @see https://www.electronjs.org/docs/latest/tutorial/security#13-disable-or-limit-navigation
    */
   contents.on('will-navigate', (event, url) => {
-    const allowedOrigins : ReadonlySet<string> =
-      new Set<`https://${string}`>(); // Do not use insecure protocols like HTTP. https://www.electronjs.org/docs/latest/tutorial/security#1-only-load-secure-content
+    const allowedOrigins: ReadonlySet<string> = new Set<`https://${string}`>(); // Do not use insecure protocols like HTTP. https://www.electronjs.org/docs/latest/tutorial/security#1-only-load-secure-content
     const { origin, hostname } = new URL(url);
     const isDevLocalhost = isDevelopment && hostname === 'localhost'; // permit live reload of index.html
-    if (!allowedOrigins.has(origin) && !isDevLocalhost){
+    if (!allowedOrigins.has(origin) && !isDevLocalhost) {
       console.warn('Blocked navigating to an unallowed origin:', origin);
       event.preventDefault();
     }
   });
 
   /**
-  * Hyperlinks to allowed sites open in the default browser.
-  *
-  * The creation of new `webContents` is a common attack vector. Attackers attempt to convince the app to create new windows,
-  * frames, or other renderer processes with more privileges than they had before; or with pages opened that they couldn't open before.
-  * You should deny any unexpected window creation.
-  *
-  * @see https://www.electronjs.org/docs/latest/tutorial/security#14-disable-or-limit-creation-of-new-windows
-  * @see https://www.electronjs.org/docs/latest/tutorial/security#15-do-not-use-openexternal-with-untrusted-content
-  */
+   * Hyperlinks to allowed sites open in the default browser.
+   *
+   * The creation of new `webContents` is a common attack vector. Attackers attempt to convince the app to create new windows,
+   * frames, or other renderer processes with more privileges than they had before; or with pages opened that they couldn't open before.
+   * You should deny any unexpected window creation.
+   *
+   * @see https://www.electronjs.org/docs/latest/tutorial/security#14-disable-or-limit-creation-of-new-windows
+   * @see https://www.electronjs.org/docs/latest/tutorial/security#15-do-not-use-openexternal-with-untrusted-content
+   */
   contents.setWindowOpenHandler(({ url }) => {
-    const allowedOrigins : ReadonlySet<string> =
-      new Set<`https://${string}`>([ // Do not use insecure protocols like HTTP. https://www.electronjs.org/docs/latest/tutorial/security#1-only-load-secure-content
+    const allowedOrigins: ReadonlySet<string> = new Set<`https://${string}`>([
+      // Do not use insecure protocols like HTTP. https://www.electronjs.org/docs/latest/tutorial/security#1-only-load-secure-content
       'https://vitejs.dev',
       'https://github.com',
-      'https://v3.vuejs.org']);
+      'https://v3.vuejs.org',
+    ]);
     const { origin } = new URL(url);
-    if (allowedOrigins.has(origin)){
+    if (allowedOrigins.has(origin)) {
       shell.openExternal(url);
     } else {
       console.warn('Blocked the opening of an unallowed origin:', origin);
@@ -115,19 +122,25 @@ app.on('web-contents-created', (_event, contents) => {
    *
    * @see https://www.electronjs.org/docs/latest/tutorial/security#5-handle-session-permission-requests-from-remote-content
    */
-  contents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    const origin = new URL(webContents.getURL()).origin;
-    const allowedOriginsAndPermissions : Map<string, Set<string>> =
-      new Map<`https://${string}`, Set<string>>([
+  contents.session.setPermissionRequestHandler(
+    (webContents, permission, callback) => {
+      const origin = new URL(webContents.getURL()).origin;
+      const allowedOriginsAndPermissions: Map<string, Set<string>> = new Map<
+        `https://${string}`,
+        Set<string>
+      >([
         //['https://permission.site', new Set(['notifications', 'media'])],
       ]);
-    if (allowedOriginsAndPermissions.get(origin)?.has(permission)) {
-      callback(true);
-    } else {
-      console.warn(`${origin} requested permission for '${permission}', but was blocked.`);
-      callback(false);
-    }
-  });
+      if (allowedOriginsAndPermissions.get(origin)?.has(permission)) {
+        callback(true);
+      } else {
+        console.warn(
+          `${origin} requested permission for '${permission}', but was blocked.`,
+        );
+        callback(false);
+      }
+    },
+  );
 
   /**
    * Verify webview options before creation
@@ -143,15 +156,13 @@ app.on('web-contents-created', (_event, contents) => {
 
     webPreferences.nodeIntegration = false;
     const { origin } = new URL(params.src);
-    const allowedOrigins : ReadonlySet<string> =
-      new Set<`https://${string}`>(); // Do not use insecure protocols like HTTP. https://www.electronjs.org/docs/latest/tutorial/security#1-only-load-secure-content
+    const allowedOrigins: ReadonlySet<string> = new Set<`https://${string}`>(); // Do not use insecure protocols like HTTP. https://www.electronjs.org/docs/latest/tutorial/security#1-only-load-secure-content
     if (!allowedOrigins.has(origin)) {
       console.warn(`A webview tried to attach ${params.src}, but was blocked.`);
       event.preventDefault();
     }
   });
 });
-
 
 app.on('second-instance', () => {
   // Someone tried to run a second instance, we should focus our window.
@@ -161,24 +172,22 @@ app.on('second-instance', () => {
   }
 });
 
-
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-
-app.whenReady()
+app
+  .whenReady()
   .then(createWindow)
   .catch((e) => console.error('Failed create window:', e));
 
-
 // Auto-updates
 if (import.meta.env.PROD) {
-  app.whenReady()
+  app
+    .whenReady()
     .then(() => import('electron-updater'))
-    .then(({autoUpdater}) => autoUpdater.checkForUpdatesAndNotify())
+    .then(({ autoUpdater }) => autoUpdater.checkForUpdatesAndNotify())
     .catch((e) => console.error('Failed check updates:', e));
 }
-
